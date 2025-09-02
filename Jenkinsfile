@@ -5,35 +5,31 @@ pipeline {
   stages {
     stage('Checkout'){ steps { checkout scm } }
 
-    stage('Build & Deploy to Artifactory'){
+    stage('Build & Deploy (sin plugin JFrog)'){
       steps {
-        script {
-          def server  = Artifactory.server('jfrog-server')
-          def rtMaven = Artifactory.newMavenBuild()
-          rtMaven.tool = 'Maven3'
+        withCredentials([usernamePassword(credentialsId: 'jfrog-creds',
+                                          usernameVariable: 'ART_USER',
+                                          passwordVariable: 'ART_PASS')]) {
+          script {
+            // 1) Compilar (genera WAR + JAR con classifier "classes")
+            bat 'mvn -B -U -DskipTests clean package'
 
-          // Resolver por el virtual "maven"
-          rtMaven.resolver server: server, releaseRepo: 'maven', snapshotRepo: 'maven'
+            // 2) Detectar versión para elegir release vs snapshot
+            def version = bat(returnStdout: true,
+              script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.version').trim()
 
-          // Publicar a locales
-          rtMaven.deployer server: server,
-                           releaseRepo: 'libs-release-local',
-                           snapshotRepo: 'libs-snapshot-local'
+            def repo = version.endsWith('-SNAPSHOT') ? 'libs-snapshot-local' : 'libs-release-local'
 
-          def info = Artifactory.newBuildInfo()
-          info.name   = 'mc-login'
-          info.number = env.BUILD_NUMBER
-
-          // Al tener el jar-plugin, se generan WAR + JAR y el plugin los deploya
-          rtMaven.run pom: 'pom.xml', goals: 'clean package -DskipTests', buildInfo: info
-
-          server.publishBuildInfo(info)
+            // 3) Publicar a Artifactory (altDeploymentRepository)
+            bat """
+              mvn -B -U -DskipTests deploy ^
+                -DaltDeploymentRepository=artifactory::default::http://%ART_USER%:%ART_PASS%@localhost:8082/artifactory/${repo}
+            """
+          }
         }
       }
     }
 
-    stage('Archive'){
-      steps { archiveArtifacts artifacts: 'target/*.war, target/*.jar', fingerprint: true }
-    }
+    stage('Archive'){ steps { archiveArtifacts artifacts: 'target/*.war, target/*.jar', fingerprint: true } }
   }
 }
