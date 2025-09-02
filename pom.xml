@@ -59,5 +59,4 @@
     </plugins>
   </build>
 </project>
-<build>
-  <finalName>mc-login</finalName>
+
