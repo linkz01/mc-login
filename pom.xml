@@ -59,4 +59,43 @@
     </plugins>
   </build>
 </project>
+<build>
+  <finalName>mc-login</finalName>
+  <plugins>
+    <!-- Empaquetado WAR -->
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-war-plugin</artifactId>
+      <version>3.4.0</version>
+      <configuration>
+        <failOnMissingWebXml>false</failOnMissingWebXml>
+      </configuration>
+    </plugin>
+
+    <!-- NUEVO: genera y adjunta un JAR con las clases -->
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-jar-plugin</artifactId>
+      <version>3.3.0</version>
+      <executions>
+        <execution>
+          <id>attach-classes-jar</id>
+          <phase>package</phase>
+          <goals>
+            <goal>jar</goal>
+          </goals>
+          <configuration>
+            <classesDirectory>${project.build.outputDirectory}</classesDirectory>
+            <classifier>classes</classifier>
+            <archive>
+              <manifest>
+                <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+              </manifest>
+            </archive>
+          </configuration>
+        </execution>
+      </executions>
+    </plugin>
+  </plugins>
+</build>
 
