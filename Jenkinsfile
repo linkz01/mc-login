@@ -3,17 +3,17 @@ pipeline {
   tools { maven 'Maven3' }
   stages {
     stage('Checkout'){ steps { checkout scm } }
-    stage('Build & Deploy to Artifactory'){
+    stage('Build & Deploy (no plugin)'){
       steps {
-        script {
-          def server  = Artifactory.server('jfrog-server')
-          def rtMaven = Artifactory.newMavenBuild()
-          rtMaven.tool = 'Maven3'
-          rtMaven.resolver server: server, releaseRepo: 'maven', snapshotRepo: 'maven'
-          rtMaven.deployer server: server, releaseRepo: 'libs-release-local', snapshotRepo: 'libs-snapshot-local'
-          def info = Artifactory.newBuildInfo(); info.name = 'mc-login'; info.number = env.BUILD_NUMBER
-          rtMaven.run pom: 'pom.xml', goals: 'clean package -DskipTests', buildInfo: info
-          server.publishBuildInfo(info)
+        withCredentials([usernamePassword(credentialsId: 'jfrog-creds',
+                                          usernameVariable: 'ART_USER',
+                                          passwordVariable: 'ART_PASS')]) {
+          bat """
+            mvn -B -U -DskipTests clean package
+            mvn -B -U -DskipTests deploy ^
+              -DaltDeploymentRepository=artifactory::default::http://%ART_USER%:%ART_PASS%@localhost:8082/artifactory/libs-release-local
+          """
+          // Si la versión termina en -SNAPSHOT, usa libs-snapshot-local en la URL
         }
       }
     }
