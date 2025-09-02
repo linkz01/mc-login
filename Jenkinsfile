@@ -1,22 +1,39 @@
 pipeline {
   agent any
   tools { maven 'Maven3' }
+
   stages {
     stage('Checkout'){ steps { checkout scm } }
-    stage('Build & Deploy (no plugin)'){
+
+    stage('Build & Deploy to Artifactory'){
       steps {
-        withCredentials([usernamePassword(credentialsId: 'jfrog-creds',
-                                          usernameVariable: 'ART_USER',
-                                          passwordVariable: 'ART_PASS')]) {
-          bat """
-            mvn -B -U -DskipTests clean package
-            mvn -B -U -DskipTests deploy ^
-              -DaltDeploymentRepository=artifactory::default::http://%ART_USER%:%ART_PASS%@localhost:8082/artifactory/libs-release-local
-          """
-          // Si la versión termina en -SNAPSHOT, usa libs-snapshot-local en la URL
+        script {
+          def server  = Artifactory.server('jfrog-server')
+          def rtMaven = Artifactory.newMavenBuild()
+          rtMaven.tool = 'Maven3'
+
+          // Resolver por el virtual "maven"
+          rtMaven.resolver server: server, releaseRepo: 'maven', snapshotRepo: 'maven'
+
+          // Publicar a locales
+          rtMaven.deployer server: server,
+                           releaseRepo: 'libs-release-local',
+                           snapshotRepo: 'libs-snapshot-local'
+
+          def info = Artifactory.newBuildInfo()
+          info.name   = 'mc-login'
+          info.number = env.BUILD_NUMBER
+
+          // Al tener el jar-plugin, se generan WAR + JAR y el plugin los deploya
+          rtMaven.run pom: 'pom.xml', goals: 'clean package -DskipTests', buildInfo: info
+
+          server.publishBuildInfo(info)
         }
       }
     }
-    stage('Archive'){ steps { archiveArtifacts artifacts: 'target/*.war', fingerprint: true } }
+
+    stage('Archive'){
+      steps { archiveArtifacts artifacts: 'target/*.war, target/*.jar', fingerprint: true }
+    }
   }
 }
